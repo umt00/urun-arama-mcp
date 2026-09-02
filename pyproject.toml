@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "config"]
+
+[project]
+name = "urun-arama-mcp"
+version = "0.1.0"
+description = "Elasticsearch için dinamik şema keşfi ve Copilot Studio entegrasyonuna sahip FastMCP tabanlı salt-okunur ürün arama aracı"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastmcp>=2.0.0",
+    "elasticsearch[async]>=8.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

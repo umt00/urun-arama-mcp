@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ── Proje-Spesifik ──────────────────────────────────────────────
+# Gerçek ortam değişkenleri (API key'ler, sırlar)
+.env
+.env.local
+.env.production
+
+# Word dokümanları (binary, repo'ya ait değil)
+*.docx
+
+# Log dosyaları
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
