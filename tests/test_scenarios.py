@@ -12,6 +12,12 @@ ve Gün 9'da doldurulacaktır.
 
 import pytest
 
+from config.settings import get_settings
+from src.es_client import ESClient
+from src.query_planner import sorgu_planla
+from src.result_formatter import sonuclari_formatla
+from src.schema_discovery import index_semasi_getir
+
 # ── Senaryo tanımları (ekipten toplanacak) ──────────────────────
 
 # ── B2B Satış Temsilcileri Teams Botu Arama Senaryoları ───────────────
@@ -107,13 +113,6 @@ SENARYOLAR = [
         "aciklama": "Depo adı bazında stok sorgulama",
     },
 ]
-
-
-from config.settings import get_settings
-from src.es_client import ESClient
-from src.query_planner import sorgu_planla
-from src.result_formatter import sonuclari_formatla
-from src.schema_discovery import index_semasi_getir
 
 
 class TestGercekSenaryolar:

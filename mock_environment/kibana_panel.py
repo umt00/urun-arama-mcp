@@ -127,7 +127,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="header">
     <div>
       <h1 style="font-size: 24px;">📊 Penta Elasticsearch Panel (Kibana Görünümü)</h1>
-      <p style="color: var(--text-muted); margin-top: 4px;">İndeks: <code style="color:#38bdf8">product-price</code> · Küme: <code style="color:#a78bfa">docker-cluster (ES 8.13.4)</code></p>
+      <p style="color: var(--text-muted); margin-top: 4px;">
+        İndeks: <code style="color:#38bdf8">product-price</code> ·
+        Küme: <code style="color:#a78bfa">docker-cluster (ES 8.13.4)</code>
+      </p>
     </div>
     <div class="status-badge">
       <div class="status-dot"></div>

@@ -70,7 +70,10 @@ MAPPING = {
 MOCK_PRODUCTS = [
     {
         "_id": "210229916",
-        "searchKey": "210229916 xerox 036k92300 left coun tm023 sarf mhm174 xerox baski cozumleri yazici sarflari zeroks drum",
+        "searchKey": (
+            "210229916 xerox 036k92300 left coun tm023 sarf mhm174 "
+            "xerox baski cozumleri yazici sarflari zeroks drum"
+        ),
         "categoryName": "Baskı Çözümleri>Yazıcı Sarfları>Xerox>Yedek Parça>Xerox Yedek Parça",
         "categoryLevel1Name": "Baskı Çözümleri",
         "categoryLevel2Name": "Yazıcı Sarfları",
@@ -133,7 +136,10 @@ MOCK_PRODUCTS = [
     },
     {
         "_id": "210229918",
-        "searchKey": "210229918 xerox 101r00474 drum unitesi phaser 3260 workcentre 3225 goruntuleme tamburu zeroks drum",
+        "searchKey": (
+            "210229918 xerox 101r00474 drum unitesi phaser 3260 workcentre 3225 "
+            "goruntuleme tamburu zeroks drum"
+        ),
         "categoryName": "Baskı Çözümleri>Yazıcı Sarfları>Xerox>Drum",
         "categoryLevel1Name": "Baskı Çözümleri",
         "categoryLevel2Name": "Yazıcı Sarfları",

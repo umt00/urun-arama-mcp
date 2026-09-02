@@ -233,3 +233,9 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# Arşiv ve Node / Tünel artıkları
+*.zip
+node_modules/
+tunnel_url.txt
+
