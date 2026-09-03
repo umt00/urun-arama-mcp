@@ -2,7 +2,6 @@
 
 """result_formatter modülü birim testleri — yeni düz yapı şeması."""
 
-
 from src.result_formatter import bos_sonuc, sonuclari_formatla
 
 # Örnek ES yanıtı
@@ -67,7 +66,8 @@ class TestSonuclariFormatla:
 
     def test_sorgu_bilgisi(self):
         sonuc = sonuclari_formatla(
-            ORNEK_ES_YANIT, "urunler",
+            ORNEK_ES_YANIT,
+            "urunler",
             filtreler={"marka": "Dell"},
             serbest_metin="laptop",
         )
@@ -87,4 +87,3 @@ class TestBosSonuc:
         assert sonuc["count"] == 0
         assert sonuc["items"] == []
         assert "mesaj" in sonuc
-

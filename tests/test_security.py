@@ -125,4 +125,3 @@ class TestLogYapilandir:
     def test_log_yapilandir_calisir(self):
         """log_yapilandir() hata vermeden çalışmalı."""
         log_yapilandir()  # Hata fırlatmadan tamamlanmalı
-

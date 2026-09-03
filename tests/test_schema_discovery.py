@@ -2,7 +2,6 @@
 
 """index_listele ve index_semasi_getir fonksiyonlarının birim testleri."""
 
-
 from src.schema_discovery import _mapping_sadelestir
 
 

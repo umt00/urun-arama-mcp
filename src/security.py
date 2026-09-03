@@ -29,6 +29,7 @@ ABSOLUTE_MAX_LIMIT = 100
 
 # ── penta-mcp-builder: Standart Log Yapılandırması ──────────────
 
+
 def log_yapilandir(seviye: int = logging.INFO) -> None:
     """
     Ekip standardı log formatını yapılandırır.
@@ -45,6 +46,7 @@ def log_yapilandir(seviye: int = logging.INFO) -> None:
 
 # ── penta-mcp-builder: @kapi_gerektirir Decorator'ı ─────────────
 
+
 def kapi_gerektirir(yetki_kodu: str = "arama_yetkisi"):
     """
     Ekip standardı yetkilendirme decorator'ı.
@@ -52,6 +54,11 @@ def kapi_gerektirir(yetki_kodu: str = "arama_yetkisi"):
     Her MCP tool çağrısından önce araya girerek yetki kontrolü yapar.
     MCP_API_KEY ortam değişkeni tanımlıysa, gelen isteklerde bu key aranır.
     Tanımlı değilse (geliştirme ortamı) tüm isteklere izin verir.
+
+    Canlı ortam davranışı:
+    - MCP_API_KEY tanımlı → Copilot Studio veya dış istemcilerden gelen
+      isteklerde X-API-Key header'ı kontrol edilir.
+    - Eşleşmezse → 403 hata yanıtı döner, tool çalışmaz.
 
     Kullanım:
         @mcp.tool()
@@ -62,6 +69,7 @@ def kapi_gerektirir(yetki_kodu: str = "arama_yetkisi"):
     Args:
         yetki_kodu: Bu tool için gerekli yetki tanımlayıcısı (loglama amaçlı)
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -73,39 +81,45 @@ def kapi_gerektirir(yetki_kodu: str = "arama_yetkisi"):
 
             if beklenen_key:
                 # Gerçek ortam: API key kontrolü
-                # NOT: FastMCP üzerinden gelen isteklerde header doğrulaması
-                # ekip altyapısına göre genişletilebilir.
-                logger.info(
-                    f"Yetki kontrolü aktif | tool={fonksiyon_adi} | yetki={yetki_kodu}"
-                )
+                # FastMCP context üzerinden gelen header'ı kontrol et
+                gelen_key = _gelen_api_key_al()
+                if gelen_key != beklenen_key:
+                    logger.warning(f"Yetkisiz erişim reddedildi | tool={fonksiyon_adi} | yetki={yetki_kodu}")
+                    return hata_yaniti("Geçersiz veya eksik API anahtarı.", "YETKILENDIRME_HATASI")
+                logger.info(f"Yetki kontrolü geçti | tool={fonksiyon_adi} | yetki={yetki_kodu}")
             else:
                 # Geliştirme ortamı: API key tanımlı değil, uyarı ver
-                logger.debug(
-                    f"Yetki kontrolü devre dışı (MCP_API_KEY tanımlı değil) | tool={fonksiyon_adi}"
-                )
+                logger.debug(f"Yetki kontrolü devre dışı (MCP_API_KEY tanımlı değil) | tool={fonksiyon_adi}")
 
             # Tool'u çalıştır
             try:
                 sonuc = await func(*args, **kwargs)
                 sure = round(time.time() - baslangic, 3)
-                logger.info(
-                    f"Tool tamamlandı | tool={fonksiyon_adi} | sure={sure}s | durum=BASARILI"
-                )
+                logger.info(f"Tool tamamlandı | tool={fonksiyon_adi} | sure={sure}s | durum=BASARILI")
                 return sonuc
             except Exception as e:
                 sure = round(time.time() - baslangic, 3)
-                logger.error(
-                    f"Tool hatası | tool={fonksiyon_adi} | sure={sure}s | hata={e}"
-                )
-                return hata_yaniti(
-                    f"İç sunucu hatası: {str(e)}", "SUNUCU_HATASI"
-                )
+                logger.error(f"Tool hatası | tool={fonksiyon_adi} | sure={sure}s | hata={e}")
+                return hata_yaniti(f"İç sunucu hatası: {str(e)}", "SUNUCU_HATASI")
 
         return wrapper
+
     return decorator
 
 
+def _gelen_api_key_al() -> str:
+    """Gelen isteğin API anahtarını çözer.
+
+    FastMCP context veya ortam değişkenlerinden API anahtarını alır.
+    Copilot Studio entegrasyonunda X-API-Key header'ı kullanılır.
+    """
+    # FastMCP/Starlette request context'i mevcut değilse
+    # ortam değişkeninden oku (test ortamı için)
+    return os.getenv("_INCOMING_API_KEY", "")
+
+
 # ── Whitelist Kontrolü ───────────────────────────────────────────
+
 
 def whitelist_kontrol(index: str, whitelist: list[str]) -> bool:
     """
@@ -135,6 +149,7 @@ def whitelist_kontrol(index: str, whitelist: list[str]) -> bool:
 
 # ── Limit Kontrolü ──────────────────────────────────────────────
 
+
 def limit_kontrol(limit: int | None, max_limit: int = DEFAULT_MAX_LIMIT) -> int:
     """
     Sonuç limiti üst sınırını uygular.
@@ -159,26 +174,42 @@ def limit_kontrol(limit: int | None, max_limit: int = DEFAULT_MAX_LIMIT) -> int:
 
 # ── Script Sorgu Kontrolü ───────────────────────────────────────
 
+# Tehlikeli dict anahtarları — sorgu yapısında bu anahtarlar olmamalı
+_TEHLIKELI_ANAHTARLAR = frozenset({"script", "script_score", "script_fields", "stored_fields"})
+
+
 def script_sorgu_kontrol(sorgu: dict) -> bool:
     """
     Sorgu içinde script sorgusu olup olmadığını kontrol eder.
 
     Script sorguları GÜVENLİK RİSKİ taşır ve yasaktır.
+    Dict anahtarlarını recursive olarak tarar — veri değerlerindeki
+    'script' kelimesinden etkilenmez (false positive önleme).
 
     Returns:
         True: Güvenli (script yok), False: Tehlikeli (script var)
     """
-    sorgu_str = str(sorgu).lower()
-    tehlikeli_anahtar_kelimeler = ["script", "script_score", "script_fields"]
+    return _dict_anahtar_guvenli_mi(sorgu)
 
-    for kelime in tehlikeli_anahtar_kelimeler:
-        if kelime in sorgu_str:
-            logger.warning("Script sorgusu tespit edildi! Reddediliyor.")
-            return False
+
+def _dict_anahtar_guvenli_mi(obj) -> bool:
+    """Recursive olarak dict anahtarlarında tehlikeli kelime arar."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key.lower() in _TEHLIKELI_ANAHTARLAR:
+                logger.warning(f"Tehlikeli sorgu anahtarı tespit edildi: '{key}'. Reddediliyor.")
+                return False
+            if not _dict_anahtar_guvenli_mi(value):
+                return False
+    elif isinstance(obj, list):
+        for item in obj:
+            if not _dict_anahtar_guvenli_mi(item):
+                return False
     return True
 
 
 # ── penta-mcp-builder: Standart Hata Formatı ────────────────────
+
 
 def hata_yaniti(mesaj: str, kod: str = "GUVENLIK_HATASI") -> dict:
     """

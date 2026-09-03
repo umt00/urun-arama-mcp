@@ -57,7 +57,20 @@ class ESClient:
         return result  # type: ignore[return-value]
 
     async def search(self, index: str, body: dict, size: int = 10) -> dict:
-        """ES arama sorgusu çalıştırır."""
+        """ES arama sorgusu çalıştırır.
+
+        elasticsearch-py 8.x uyumlu: body parametresini ayrıştırarak
+        keyword arguments olarak geçer (deprecation uyarısını önler).
+        """
         client = await self.get_client()
-        result = await client.search(index=index, body=body, size=size)
+        # body dict'inden query ve diğer üst seviye anahtarları ayır
+        query = body.get("query")
+        kwargs: dict = {"index": index, "size": size}
+        if query is not None:
+            kwargs["query"] = query
+        # Diğer body parametrelerini de destekle (sort, _source, aggs vb.)
+        for key in ("sort", "_source", "aggs", "aggregations", "highlight", "post_filter"):
+            if key in body:
+                kwargs[key] = body[key]
+        result = await client.search(**kwargs)
         return result  # type: ignore[return-value]

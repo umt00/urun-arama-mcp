@@ -2,7 +2,6 @@
 
 """query_planner modülü birim testleri."""
 
-
 from src.query_planner import sorgu_planla
 
 # Örnek şema (index_semasi_getir çıktısı formatında)

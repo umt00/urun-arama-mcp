@@ -21,6 +21,8 @@ import logging
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse, RedirectResponse
 
 from config.settings import get_settings
 from src.es_client import ESClient
@@ -53,11 +55,12 @@ es = ESClient(settings)
 mcp = FastMCP(
     "Ürün Arama MCP",
     instructions="Elasticsearch üzerinde salt-okunur ürün arama aracı. "
-                 "Index keşfi, şema analizi ve yapılandırılmış arama sağlar.",
+    "Index keşfi, şema analizi ve yapılandırılmış arama sağlar.",
 )
 
 
 # ── Tool Tanımları (penta-mcp-builder: @kapi_gerektirir) ────────
+
 
 @mcp.tool()
 @kapi_gerektirir(yetki_kodu="index_listeleme")
@@ -74,7 +77,7 @@ async def index_listele_tool() -> list[dict]:
 
 @mcp.tool()
 @kapi_gerektirir(yetki_kodu="sema_okuma")
-async def index_semasi_getir_tool(index: str) -> dict:
+async def index_semasi_getir_tool(index: str = "product-price") -> dict:
     """
     Belirtilen ürün index'inin alan ve veri tip haritasını (mapping) döndürür.
 
@@ -99,19 +102,20 @@ async def index_semasi_getir_tool(index: str) -> dict:
 @mcp.tool()
 @kapi_gerektirir(yetki_kodu="urun_arama")
 async def urun_ara_tool(
-    index: str,
+    index: str = "product-price",
     filtreler: dict | None = None,
     serbest_metin: str | None = None,
     limit: int = 10,
 ) -> dict:
     """
-    Kurumsal Elasticsearch kataloğunda ürün, stok, fiyat ve parça kodu araması yapar.
+    Kurumsal Elasticsearch kataloğunda ürün, stok ve parça kodu araması yapar.
 
     Satış Temsilcileri ve Teams Botu Kullanım İpuçları:
     - Parça Kodu / Ürün Kodu araması için: serbest_metin='036K92300' veya '210229916'
     - Marka Filtresi için: filtreler={'product.exMaterialGroupValue': 'Xerox'} veya {'categoryLevel3Name': 'Dell'}
     - Stok Filtresi için: filtreler={'product.totalstock': {'gt': 0}}
-    - Fiyat Aralığı araması için: filtreler={'productUsdPrice': {'gte': 100, 'lte': 500}}
+    - Kategori Filtresi için: filtreler={'categoryLevel1Name': 'Baskı Çözümleri'}
+    - EOL Filtresi için: filtreler={'isEol': False}
 
     Args:
         index: Aranacak ürün index'i (örn: 'product-price')
@@ -162,8 +166,8 @@ async def urun_ara_tool(
     return sonuc
 
 
-
 # ── Health Check ─────────────────────────────────────────────────
+
 
 @mcp.tool()
 @kapi_gerektirir(yetki_kodu="health_check")
@@ -184,9 +188,39 @@ async def health_check() -> dict:
         }
 
 
+@mcp.custom_route("/", methods=["GET"])
+async def root_status(request: Request):
+    """Kök URL'e tarayıcıdan veya Copilot Studio'dan gelen GET doğrulama isteklerine 200 OK döner."""
+    return JSONResponse(
+        {
+            "durum": "aktif",
+            "servis": "Penta Ürün Arama MCP",
+            "mcp_endpoint": "/mcp",
+            "protokol": "Streamable HTTP (MCP)",
+            "araclar": [
+                "urun_ara_tool",
+                "index_listele_tool",
+                "index_semasi_getir_tool",
+                "health_check",
+            ],
+        }
+    )
+
+
+@mcp.custom_route("/", methods=["POST"])
+async def root_post_redirect(request: Request):
+    """Kök URL'e gelen JSON-RPC POST isteklerini /mcp endpoint'ine yönlendirir."""
+    return RedirectResponse(url="/mcp", status_code=307)
+
+
+@mcp.custom_route("/sse", methods=["GET", "POST"])
+async def sse_redirect(request: Request):
+    """Copilot Studio veya eski istemcilerin /sse adresine gönderdiği istekleri /mcp'ye yönlendirir."""
+    return RedirectResponse(url="/mcp", status_code=307)
+
+
 # ── Sunucu Başlatma ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    logger.info(f"MCP Sunucusu SSE protokolü ile başlatılıyor: {settings.mcp_host}:{settings.mcp_port}")
-    mcp.run(transport="sse", host=settings.mcp_host, port=settings.mcp_port)
-
+    logger.info(f"MCP Sunucusu Streamable HTTP protokolü ile başlatılıyor: {settings.mcp_host}:{settings.mcp_port}")
+    mcp.run(transport="http", host=settings.mcp_host, port=settings.mcp_port)

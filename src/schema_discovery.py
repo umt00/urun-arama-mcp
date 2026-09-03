@@ -28,12 +28,14 @@ async def index_listele(es: ESClient, whitelist: list[str]) -> list[dict]:
         # Whitelist kontrolü
         if whitelist and not whitelist_kontrol(index_adi, whitelist):
             continue
-        sonuc.append({
-            "index": index_adi,
-            "dokuman_sayisi": idx.get("docs.count", "0"),
-            "boyut": idx.get("store.size", "0"),
-            "durum": idx.get("health", "unknown"),
-        })
+        sonuc.append(
+            {
+                "index": index_adi,
+                "dokuman_sayisi": idx.get("docs.count", "0"),
+                "boyut": idx.get("store.size", "0"),
+                "durum": idx.get("health", "unknown"),
+            }
+        )
     return sonuc
 
 
@@ -55,33 +57,60 @@ async def index_semasi_getir(es: ESClient, index: str, whitelist: list[str]) -> 
 
 
 def _mapping_sadelestir(raw_mapping: dict, index: str) -> dict:
-    """Ham ES mapping çıktısını LLM-dostu özete dönüştürür."""
+    """Ham ES mapping çıktısını LLM-dostu özete dönüştürür.
+
+    Object ve nested alanlar recursive olarak düzleştirilir:
+    product.productID, product.totalstock gibi nokta-notasyonlu
+    alan adları üretilir. Bu sayede sorgu planlayıcı ve filtreler
+    doğrudan bu alan adlarını kullanabilir.
+    """
     try:
         properties = raw_mapping[index]["mappings"].get("properties", {})
     except (KeyError, TypeError):
         return {"hata": f"'{index}' için mapping bilgisi alınamadı.", "alanlar": []}
 
-    alanlar = []
-    for alan_adi, alan_bilgi in properties.items():
-        alan = {
-            "alan": alan_adi,
-            "tip": alan_bilgi.get("type", "object"),
-        }
-        # Analyzer bilgisi varsa ekle
-        if "analyzer" in alan_bilgi:
-            alan["analyzer"] = alan_bilgi["analyzer"]
-        # keyword alt-alanı varsa belirt
-        if "fields" in alan_bilgi and "keyword" in alan_bilgi.get("fields", {}):
-            alan["keyword_alt_alan"] = True
-        # Nested properties varsa
-        if "properties" in alan_bilgi:
-            alan["tip"] = "object"
-            alan["alt_alanlar"] = list(alan_bilgi["properties"].keys())
-
-        alanlar.append(alan)
+    alanlar = _ozellikleri_duzlestir(properties)
 
     return {
         "index": index,
         "toplam_alan": len(alanlar),
         "alanlar": alanlar,
     }
+
+
+def _ozellikleri_duzlestir(properties: dict, prefix: str = "") -> list[dict]:
+    """Mapping properties'i recursive olarak düzleştirir.
+
+    Nested/object altındaki alanlar 'parent.child' notasyonuyla
+    tek seviyeye indirgenir.
+    """
+    alanlar: list[dict] = []
+    for alan_adi, alan_bilgi in properties.items():
+        tam_ad = f"{prefix}{alan_adi}" if not prefix else f"{prefix}.{alan_adi}"
+
+        # Alt özellikleri olan alan (object veya nested)
+        if "properties" in alan_bilgi:
+            alt_tip = alan_bilgi.get("type", "object")
+            # Üst alan bilgisini de ekle (object/nested olarak)
+            alanlar.append(
+                {
+                    "alan": tam_ad,
+                    "tip": alt_tip,
+                    "alt_alanlar": list(alan_bilgi["properties"].keys()),
+                }
+            )
+            # Alt alanları recursive olarak düzleştir
+            alanlar.extend(_ozellikleri_duzlestir(alan_bilgi["properties"], tam_ad))
+        else:
+            # Yaprak alan (leaf field)
+            alan: dict = {
+                "alan": tam_ad,
+                "tip": alan_bilgi.get("type", "text"),
+            }
+            if "analyzer" in alan_bilgi:
+                alan["analyzer"] = alan_bilgi["analyzer"]
+            if "fields" in alan_bilgi and "keyword" in alan_bilgi.get("fields", {}):
+                alan["keyword_alt_alan"] = True
+            alanlar.append(alan)
+
+    return alanlar

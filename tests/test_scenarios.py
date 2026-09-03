@@ -152,4 +152,3 @@ class TestGercekSenaryolar:
 
         # Temizlik
         await es.close()
-

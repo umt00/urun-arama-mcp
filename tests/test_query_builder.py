@@ -2,7 +2,6 @@
 
 """query_builder modülü birim testleri — ES'e gitmeden sorgu doğruluğu test edilir."""
 
-
 from src.query_builder import (
     alan_tipine_gore_sorgu,
     bool_sorgu_kur,

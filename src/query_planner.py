@@ -52,13 +52,15 @@ def sorgu_planla(
                     hedef_alanlar.append(alan)
 
         if hedef_alanlar:
-            must_sorgular.append({
-                "multi_match": {
-                    "query": serbest_metin,
-                    "fields": hedef_alanlar,
-                    "type": "best_fields",
+            must_sorgular.append(
+                {
+                    "multi_match": {
+                        "query": serbest_metin,
+                        "fields": hedef_alanlar,
+                        "type": "best_fields",
+                    }
                 }
-            })
+            )
         else:
             hatalar.append("Index'te metin araması yapılabilecek alan bulunamadı.")
 
@@ -90,4 +92,3 @@ def _alan_tip_haritasi(sema: dict) -> dict[str, str]:
     for alan_bilgi in sema.get("alanlar", []):
         harita[alan_bilgi["alan"]] = alan_bilgi.get("tip", "text")
     return harita
-

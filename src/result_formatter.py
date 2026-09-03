@@ -10,9 +10,29 @@ Satış Temsilcileri İçin Öne Çıkarılan Alanlar:
 - marka (product.exMaterialGroupValue / categoryLevel3Name)
 - kategori (categoryName)
 - stok_toplam (product.totalstock)
-- fiyat_usd (productUsdPrice)
-- fiyat_tl (productTryPrice)
 """
+
+
+def _nested_get(source: dict, key: str, default=None):
+    """Nokta-notasyonlu anahtarı nested dict içinde çözer.
+
+    Örnek:
+        _nested_get({"product": {"productID": "123"}}, "product.productID")
+        → "123"
+
+        _nested_get({"categoryName": "Baskı"}, "categoryName")
+        → "Baskı"
+    """
+    keys = key.split(".")
+    value = source
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k)
+        else:
+            return default
+        if value is None:
+            return default
+    return value
 
 
 def sonuclari_formatla(
@@ -44,20 +64,20 @@ def sonuclari_formatla(
 
             # Satış Temsilcisi için Özet Bilgiler (Hızlı Teams Kartı Oluşturma İçin)
             urun_adi = (
-                source.get("product.name")
-                or source.get("product.description")
+                _nested_get(source, "product.name")
+                or _nested_get(source, "product.description")
                 or source.get("name")
                 or ""
             )
             if isinstance(urun_adi, list):
                 urun_adi = urun_adi[0] if urun_adi else ""
 
-            part_no = source.get("product.producerPartNo") or source.get("producerPartNo") or ""
+            part_no = _nested_get(source, "product.producerPartNo") or source.get("producerPartNo") or ""
             if isinstance(part_no, list):
                 part_no = part_no[0] if part_no else ""
 
             marka = (
-                source.get("product.exMaterialGroupValue")
+                _nested_get(source, "product.exMaterialGroupValue")
                 or source.get("categoryLevel3Name")
                 or source.get("brand")
                 or ""
@@ -65,19 +85,11 @@ def sonuclari_formatla(
             if isinstance(marka, list):
                 marka = marka[0] if marka else ""
 
-            stok = source.get("product.totalstock")
+            stok = _nested_get(source, "product.totalstock")
             if stok is None:
                 stok = source.get("totalstock", 0)
             if isinstance(stok, list):
                 stok = stok[0] if stok else 0
-
-            fiyat_usd = source.get("productUsdPrice") or source.get("priceUsd") or 0
-            if isinstance(fiyat_usd, list):
-                fiyat_usd = fiyat_usd[0] if fiyat_usd else 0
-
-            fiyat_tl = source.get("productTryPrice") or source.get("priceTry") or 0
-            if isinstance(fiyat_tl, list):
-                fiyat_tl = fiyat_tl[0] if fiyat_tl else 0
 
             # Temel item yapısını oluştur
             item = {
@@ -88,8 +100,6 @@ def sonuclari_formatla(
                     "part_no": part_no,
                     "marka": marka,
                     "stok_toplam": stok,
-                    "fiyat_usd": fiyat_usd,
-                    "fiyat_tl": fiyat_tl,
                 },
             }
 
@@ -130,5 +140,3 @@ def bos_sonuc(index: str, mesaj: str = "Bu kriterlere uyan ürün bulunamadı.")
         "hata": None,
         "mesaj": mesaj,
     }
-
-

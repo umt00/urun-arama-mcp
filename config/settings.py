@@ -18,15 +18,9 @@ class Settings:
 
     # Güvenlik
     index_whitelist: list[str] = field(
-        default_factory=lambda: [
-            s.strip()
-            for s in os.getenv("INDEX_WHITELIST", "").split(",")
-            if s.strip()
-        ]
+        default_factory=lambda: [s.strip() for s in os.getenv("INDEX_WHITELIST", "").split(",") if s.strip()]
     )
-    max_result_limit: int = field(
-        default_factory=lambda: int(os.getenv("MAX_RESULT_LIMIT", "50"))
-    )
+    max_result_limit: int = field(default_factory=lambda: int(os.getenv("MAX_RESULT_LIMIT", "50")))
 
     # MCP Sunucu
     mcp_host: str = field(default_factory=lambda: os.getenv("MCP_HOST", "0.0.0.0"))

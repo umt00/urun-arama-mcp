@@ -61,18 +61,26 @@ def alan_tipine_gore_sorgu(alan: str, tip: str, deger) -> dict:
     ⚠️ text alanda term kullanmak boş sonuç döndürür!
     """
     if tip in ("keyword", "boolean"):
-        return term_sorgusu(alan, deger)
+        sorgu = term_sorgusu(alan, deger)
     elif tip == "text":
-        return match_sorgusu(alan, str(deger))
+        sorgu = match_sorgusu(alan, str(deger))
     elif tip in ("integer", "long", "float", "double", "date"):
         # deger dict ise range parametrelerini içerir: {"gte": 10, "lte": 20}
         if isinstance(deger, dict):
-            return range_sorgusu(alan, **deger)
-        # Tek değer ise eşitlik olarak range
-        return range_sorgusu(alan, gte=deger, lte=deger)
+            sorgu = range_sorgusu(alan, **deger)
+        else:
+            sorgu = range_sorgusu(alan, gte=deger, lte=deger)
     else:
         # Bilinmeyen tip — match ile dene
-        return match_sorgusu(alan, str(deger))
+        sorgu = match_sorgusu(alan, str(deger))
+
+    # B2B ES şemasına özel 'nested' sarmalayıcı (radikal olmayan, pratik çözüm)
+    if alan.startswith("storageStocks."):
+        return {"nested": {"path": "storageStocks", "query": sorgu}}
+    elif alan.startswith("productPropertyRelations."):
+        return {"nested": {"path": "productPropertyRelations", "query": sorgu}}
+
+    return sorgu
 
 
 def bool_sorgu_kur(
