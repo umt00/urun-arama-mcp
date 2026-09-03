@@ -239,3 +239,10 @@ logs/
 node_modules/
 tunnel_url.txt
 
+# Runtime / Süreç Takip Dosyaları (main.py)
+.system_pids.json
+.mcp_server.log
+.tunnel_current.log
+.*.log
+
+

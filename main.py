@@ -20,6 +20,8 @@ Kullanım:
 import json
 import os
 import re
+import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -35,7 +37,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# Windows localhost proxy atlatma
+# Localhost proxy atlatma
 os.environ["NO_PROXY"] = "localhost,127.0.0.1"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -44,6 +46,17 @@ MOCK_DIR = BASE_DIR / "mock_environment"
 DOCKER_COMPOSE_FILE = MOCK_DIR / "docker-compose.yml"
 TUNNEL_LOG = BASE_DIR / ".tunnel_current.log"
 MCP_LOG = BASE_DIR / ".mcp_server.log"
+
+
+def get_python_executable() -> str:
+    """Proje venv'i varsa onu, yoksa sys.executable döndürür."""
+    if sys.platform == "win32":
+        venv_py = BASE_DIR / ".venv" / "Scripts" / "python.exe"
+    else:
+        venv_py = BASE_DIR / ".venv" / "bin" / "python"
+    if venv_py.exists():
+        return str(venv_py)
+    return sys.executable
 
 
 # ── Renkli Konsol Çıktıları ──────────────────────────────────────
@@ -85,19 +98,30 @@ def save_pids(pids: dict):
 def is_pid_running(pid: int) -> bool:
     if not pid or pid <= 0:
         return False
-    try:
-        # Windows tasklist kontrolü
-        out = subprocess.check_output(f'tasklist /FI "PID eq {pid}"', shell=True, text=True, stderr=subprocess.DEVNULL)
-        return str(pid) in out
-    except Exception:
-        return False
+    if sys.platform == "win32":
+        try:
+            cmd = f'tasklist /FI "PID eq {pid}"'
+            out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+            return str(pid) in out
+        except Exception:
+            return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
 
 
 def is_cloudflared_running() -> bool:
     try:
-        cmd = 'tasklist /FI "IMAGENAME eq cloudflared.exe"'
-        out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
-        return "cloudflared.exe" in out
+        if sys.platform == "win32":
+            cmd = 'tasklist /FI "IMAGENAME eq cloudflared.exe"'
+            out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+            return "cloudflared.exe" in out
+        else:
+            res = subprocess.run(["pgrep", "-f", "cloudflared"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return res.returncode == 0
     except Exception:
         return False
 
@@ -105,12 +129,15 @@ def is_cloudflared_running() -> bool:
 def kill_pid(pid: int):
     if pid and is_pid_running(pid):
         try:
-            subprocess.run(
-                f"taskkill /F /T /PID {pid}",
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            if sys.platform == "win32":
+                subprocess.run(
+                    f"taskkill /F /T /PID {pid}",
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                os.kill(pid, signal.SIGTERM)
         except Exception:
             pass
 
@@ -154,7 +181,7 @@ def start_docker():
 
     # ES hazır olana kadar kısa bekleme
     print("  ⏳ Elasticsearch sağlık kontrolü bekleniyor...", end="", flush=True)
-    for _ in range(15):
+    for _ in range(25):
         if check_http("http://127.0.0.1:9200"):
             print(f" {Colors.GREEN}SAĞLIKLI!{Colors.END}")
             return True
@@ -166,15 +193,16 @@ def start_docker():
 
 def seed_mock_data():
     print(f"\n{Colors.BLUE}🌱 20.000 Benzersiz Sentetik Ürün Verisi Yükleniyor...{Colors.END}")
-    cmd = f'uv run python "{MOCK_DIR / "generate_20k_products.py"}"'
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    seed_script = MOCK_DIR / "seed_mock_es.py"
+    if not seed_script.exists():
+        seed_script = MOCK_DIR / "generate_20k_products.py"
+
+    python_bin = get_python_executable()
+    res = subprocess.run([python_bin, str(seed_script)], capture_output=True, text=True)
     if res.returncode == 0:
         print(f"  {Colors.GREEN}✓ 20.000 adet ürün 'product-price' indeksine başarıyla yüklendi.{Colors.END}")
     else:
         print(f"  {Colors.RED}✗ Mock veri yüklenemedi:{Colors.END} {res.stderr.strip() or res.stdout.strip()}")
-
-
-WIN_DETACHED = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0
 
 
 def start_mcp_server(pids: dict):
@@ -185,11 +213,20 @@ def start_mcp_server(pids: dict):
 
     mcp_script = BASE_DIR / "mcp_server.py"
     mcp_log_file = open(MCP_LOG, "a", encoding="utf-8")
+
+    popen_kwargs = {
+        "stdout": mcp_log_file,
+        "stderr": subprocess.STDOUT,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = 0x00000008 | 0x00000200
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    python_bin = get_python_executable()
     proc = subprocess.Popen(
-        [sys.executable, str(mcp_script)],
-        stdout=mcp_log_file,
-        stderr=subprocess.STDOUT,
-        creationflags=WIN_DETACHED,
+        [python_bin, str(mcp_script)],
+        **popen_kwargs,
     )
     pids["mcp_server"] = proc.pid
     save_pids(pids)
@@ -206,15 +243,24 @@ def start_mcp_server(pids: dict):
 
 
 def start_cloudflare_tunnel(pids: dict) -> str | None:
-    print(f"\n{Colors.BLUE}🌐 [3/4] Cloudflare HTTPS Tüneli Başlatılıyor...{Colors.END}")
+    print(f"\n{Colors.BLUE}🌐 [3/4] Cloudflare HTTPS Tüneli Kontrol Ediliyor...{Colors.END}")
 
-    # Eski tüm zombi cloudflared süreçlerini kesinlikle öldür (port çakışmasını önler)
-    subprocess.run(
-        "taskkill /F /IM cloudflared.exe",
-        shell=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if not shutil.which("cloudflared"):
+        print(f"  {Colors.YELLOW}⚠ 'cloudflared' bulunamadı.{Colors.END}")
+        print(f"  {Colors.CYAN}ℹ FastMCP lokalde http://127.0.0.1:8008/ adresinde hazır.{Colors.END}")
+        print(f"  {Colors.CYAN}ℹ Copilot Studio tüneli için 'brew install cloudflared' kurabilirsiniz.{Colors.END}")
+        return None
+
+    # Eski tüm zombi cloudflared süreçlerini temizle
+    if sys.platform == "win32":
+        subprocess.run(
+            "taskkill /F /IM cloudflared.exe",
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.run(["pkill", "-f", "cloudflared"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Eski logu temizle
     if TUNNEL_LOG.exists():
@@ -225,11 +271,19 @@ def start_cloudflare_tunnel(pids: dict) -> str | None:
 
     tunnel_cmd = ["cloudflared", "tunnel", "--url", "http://127.0.0.1:8008"]
     log_file = open(TUNNEL_LOG, "a", encoding="utf-8")
+
+    popen_kwargs = {
+        "stdout": log_file,
+        "stderr": subprocess.STDOUT,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = 0x00000008 | 0x00000200
+    else:
+        popen_kwargs["start_new_session"] = True
+
     proc = subprocess.Popen(
         tunnel_cmd,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-        creationflags=WIN_DETACHED,
+        **popen_kwargs,
     )
     pids["cloudflare_tunnel"] = proc.pid
     save_pids(pids)
@@ -279,8 +333,12 @@ def stop_all(pids: dict, stop_docker: bool = False):
         pids.pop("mcp_server", None)
 
     # Ekstra port 8008 temizliği
-    port_kill_cmd = "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8008') do taskkill /F /PID %a"
-    subprocess.run(port_kill_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sys.platform == "win32":
+        port_kill_cmd = "for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8008') do taskkill /F /PID %a"
+        subprocess.run(port_kill_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        unix_port_kill = "lsof -ti:8008 | xargs kill -9"
+        subprocess.run(unix_port_kill, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 3. Docker (İsteğe bağlı)
     if stop_docker:
