@@ -41,11 +41,13 @@ if sys.platform == "win32":
 os.environ["NO_PROXY"] = "localhost,127.0.0.1"
 
 BASE_DIR = Path(__file__).resolve().parent
-PID_FILE = BASE_DIR / ".system_pids.json"
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+PID_FILE = LOG_DIR / "system_pids.json"
 MOCK_DIR = BASE_DIR / "mock_environment"
 DOCKER_COMPOSE_FILE = MOCK_DIR / "docker-compose.yml"
-TUNNEL_LOG = BASE_DIR / ".tunnel_current.log"
-MCP_LOG = BASE_DIR / ".mcp_server.log"
+TUNNEL_LOG = LOG_DIR / "tunnel_current.log"
+MCP_LOG = LOG_DIR / "mcp_server.log"
 
 
 def get_python_executable() -> str:
