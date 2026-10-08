@@ -24,7 +24,7 @@ class Settings:
 
     # MCP Sunucu
     mcp_host: str = field(default_factory=lambda: os.getenv("MCP_HOST", "0.0.0.0"))
-    mcp_port: int = field(default_factory=lambda: int(os.getenv("MCP_PORT", "8000")))
+    mcp_port: int = field(default_factory=lambda: int(os.getenv("MCP_PORT", "8008")))
 
 
 def get_settings() -> Settings:

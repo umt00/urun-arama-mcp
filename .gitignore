@@ -239,8 +239,14 @@ logs/
 node_modules/
 tunnel_url.txt
 
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 # Runtime / Süreç Takip Dosyaları (main.py)
-logs/
 .system_pids.json
 .mcp_server.log
 .tunnel_current.log
